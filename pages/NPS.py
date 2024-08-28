@@ -58,4 +58,4 @@ MDSidebar()
 MDFilters()
 
 st.title('Meeting Doctors - Performance Dashboard')
-st.subheader('Chat - Indicadores generales')
+st.subheader('NPS - Indicadores generales')
