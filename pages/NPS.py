@@ -48,7 +48,7 @@ def MDFilters(usersdf, specialitiesdf):
         "Grupos de usuario",
         usersdf
     )
-    st.sidebar.multiselect(
+    st.sidebar.multiselect(<
         "Especialidad",
         specialitiesdf
     )
