@@ -57,5 +57,5 @@ MDSetAppCFG()
 MDSidebar()
 MDFilters()
 
-st.title('Meeting Doctors - Performance Dashboard')
+st.title('Meeting Doctors Analytics')
 st.subheader('Videocalls - Indicadores generales')
