@@ -34,7 +34,7 @@ def MDSidebar():
     st.sidebar.page_link("pages/Videocalls.py", label="Videocalls")
     st.sidebar.page_link("pages/NPS.py", label="NPS")
 
-def MDFilters():
+def MDFilters(usersdf, specialitiesdf):
     st.sidebar.header("Filtros")
     st.sidebar.multiselect(
         "Año",
@@ -46,16 +46,33 @@ def MDFilters():
     )
     st.sidebar.multiselect(
         "Grupos de usuario",
-        ["Grupo A", "Grupo B", "Grupo C"]
+        usersdf
     )
     st.sidebar.multiselect(
         "Especialidad",
-        ["Medicina General", "Pediatria", "Dermatologia", "Ginecologia"]
+        specialitiesdf
     )
+
+def MDConnection():
+    # Initialize connection.
+    conn = st.connection("snowflake")
+
+    return conn
+
+def MDGetMasterData(conn, tableName):
+    # Perform query.
+    df = conn.query("SELECT DISTINCT * from "+ chr(34) + tableName + chr(34) +";", ttl=600)
+
+    return df
+
+def MDGetFilteredData(conn, tableName):
+    # Perform query.
+    df = conn.query("SELECT DISTINCT * from "+ chr(34) + tableName + chr(34) +" WHERE " + chr(34) + "ApiKey" + chr(34) + " = 'ccdf91e84fda3ccf';", ttl=600)
+
+    return df
 
 MDSetAppCFG()
 MDSidebar()
-MDFilters()
 
 st.title('Meeting Doctors Analytics')
 st.markdown(
@@ -71,3 +88,9 @@ st.markdown(
     """
   )
 st.subheader('Indicadores generales')
+
+conn = MDConnection()
+specialitiesdf = MDGetMasterData(conn,"specialities")
+usersdf = MDGetFilteredData(conn,"users")
+
+MDFilters(usersdf["UserCustomerGroup"].str.capitalize().unique(),specialitiesdf["SpecialityES"].unique())
