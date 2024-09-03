@@ -94,3 +94,4 @@ specialitiesdf = MDGetMasterData(conn,"specialities")
 usersdf = MDGetFilteredData(conn,"users")
 
 MDFilters(usersdf["UserCustomerGroup"].str.capitalize().unique(),specialitiesdf["SpecialityES"].unique())
+

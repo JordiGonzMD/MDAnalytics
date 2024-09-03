@@ -1,4 +1,6 @@
 import streamlit as st
+import pandas as pd
+import altair as alt
 from PIL import Image
 # from streamlit_dynamic_filters import DynamicFilters
 
@@ -33,25 +35,15 @@ def MDSidebar():
     st.sidebar.page_link("pages/Chats.py", label="Chats")
     st.sidebar.page_link("pages/Videocalls.py", label="Videocalls")
     st.sidebar.page_link("pages/NPS.py", label="NPS")
-
-def MDFilters(usersdf, specialitiesdf):
     st.sidebar.header("Filtros")
-    st.sidebar.multiselect(
-        "Año",
-        ["2024", "2023", "2022"]
+
+def MDMultiselectFilter (multiselectname, df):
+    multiselect_df = st.sidebar.multiselect(
+        multiselectname,
+        df
     )
-    st.sidebar.multiselect(
-        "Mes",
-        ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    )
-    st.sidebar.multiselect(
-        "Grupos de usuario",
-        usersdf
-    )
-    st.sidebar.multiselect(
-        "Especialidad",
-        specialitiesdf
-    )
+
+    return multiselect_df
 
 def MDConnection():
     # Initialize connection.
@@ -59,15 +51,20 @@ def MDConnection():
 
     return conn
 
-def MDGetMasterData(conn, tableName):
-    # Perform query.
-    df = conn.query("SELECT DISTINCT * from "+ chr(34) + tableName + chr(34) +";", ttl=600)
-
-    return df
-
-def MDGetFilteredData(conn, tableName):
-    # Perform query.
-    df = conn.query("SELECT DISTINCT * from "+ chr(34) + tableName + chr(34) +" WHERE " + chr(34) + "ApiKey" + chr(34) + " = 'ccdf91e84fda3ccf';", ttl=600)
+def MDGetUsageData(conn):
+    df = conn.query("""
+            SELECT 
+                Year("ChatSentDate") as "Año"
+                , MONTHNAME("ChatSentDate") as "Mes"
+                , "ConsultationUserDescription"
+                , "specialities"."SpecialityES" as "Speciality"
+                , count(distinct "ChatMsgID") as "Chats" 
+            FROM "ChatConsultations"
+            LEFT JOIN "specialities" using ("SpecialityID")
+            WHERE "ApiKey" = 'ccdf91e84fda3ccf'
+            GROUP BY 1,2,3,4
+            ;
+    """)
 
     return df
 
@@ -75,10 +72,56 @@ MDSetAppCFG()
 MDSidebar()
 
 st.title('Meeting Doctors Analytics')
-st.subheader('Chat - Indicadores generales')
 
+# Nos conectamos a la base de datos
 conn = MDConnection()
-specialitiesdf = MDGetMasterData(conn,"specialities")
-usersdf = MDGetFilteredData(conn,"users")
 
-MDFilters(usersdf["UserCustomerGroup"].str.capitalize().unique(),specialitiesdf["SpecialityES"].unique())
+# Obtenemos los datos de uso directamente del dwh
+chatusagedf = MDGetUsageData(conn)
+chatusagedf['ConsultationUserDescription'] = chatusagedf['ConsultationUserDescription'].str.capitalize()
+
+# Generamos los filtros a partir de los datos de uso
+years_selected = MDMultiselectFilter("Año",chatusagedf.sort_values(by="Año", ascending=False)['Año'].unique())
+# Ordenamos el df para poder mostrarlo correctamente
+months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+chatusagedf['Mes'] = pd.Categorical(chatusagedf['Mes'], categories=months, ordered=True)
+month_selected = MDMultiselectFilter("Mes",chatusagedf.sort_values(by="Mes", ascending=True)['Mes'].unique())
+usergroups_selected = MDMultiselectFilter("Grupos de usuario",chatusagedf['ConsultationUserDescription'].unique())
+especialidad_selected = MDMultiselectFilter("Especialidad",chatusagedf['Speciality'].unique())
+
+# Seteamos los campos a su tipo de dato correspondiente
+# chatusagedf["SpecialityID"] = pd.to_numeric(chatusagedf['SpecialityID'])
+
+# Pregutamos si hay algun filtro realizado, en caso de tenerlo, lo aplicamos al dataset para generar los gráficos
+if years_selected:
+    mask_years = chatusagedf['Año'].isin(years_selected)
+    chatusagedf = chatusagedf[mask_years]
+if month_selected:
+    mask_months = chatusagedf['Mes'].isin(month_selected)
+    chatusagedf = chatusagedf[mask_months]
+if usergroups_selected:
+    mask_groups = chatusagedf['ConsultationUserDescription'].isin(usergroups_selected)
+    chatusagedf = chatusagedf[mask_groups]
+if especialidad_selected:
+    mask_especialities = chatusagedf['Speciality'].isin(especialidad_selected)
+    chatusagedf = chatusagedf[mask_especialities]
+
+# Agrupamos el df por Mes para generar un bar chart mensual comparativo interanual
+# cy_chatsdf_date = cy_chatsdf.groupby('Mes')['Chats'].sum().reset_index(name ='Chats')
+if years_selected and len(years_selected) <= 1:
+    xAxisName = "Mes"
+    cy_chatsdf_date = chatusagedf.groupby('Mes')['Chats'].sum().reset_index(name ='Chats')
+else:
+    xAxisName = "Año"
+    cy_chatsdf_date = chatusagedf.groupby('Año')['Chats'].sum().reset_index(name ='Chats')
+
+# Generamos el barchart
+st.subheader('Evolución mensual de consultas de Chat')
+st.bar_chart(cy_chatsdf_date, x=xAxisName, y="Chats", color="#4fa6ff")
+
+# Agrupamos el df por Especialidad para generar un bar y pie chart
+cy_chatsdf_espe = chatusagedf.groupby('Speciality')['Chats'].sum().reset_index(name ='Chats').sort_values(by='Chats',ascending=False)
+
+# Generamos el barchart
+st.subheader('Distribución de consultas de Chat por Especialidad')
+st.bar_chart(cy_chatsdf_espe, x="Speciality", y="Chats", color="Speciality")
